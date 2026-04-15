@@ -1,0 +1,111 @@
+name: Build and Generate SBOMs
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  APP_NAME: react-sbom-github-actions
+  NODE_VERSION: 18.x
+
+jobs:
+  build-and-sbom:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      # ============================================
+      # Checkout / Node.js setup
+      # ============================================
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      # ============================================
+      # Build
+      # ============================================
+      - name: Build React app
+        run: |
+          npm ci
+          npm run build
+
+      # ============================================
+      # Build artifact
+      # ============================================
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: react-app-build
+          path: dist
+          if-no-files-found: error
+
+      # ============================================
+      # SPDX: Install -> Generate -> Archive -> Upload
+      # ============================================
+      - name: "SPDX: Install sbom-tool"
+        run: |
+          curl -sSL https://github.com/microsoft/sbom-tool/releases/latest/download/sbom-tool-linux-x64 -o sbom-tool
+          chmod +x sbom-tool
+          sudo mv sbom-tool /usr/local/bin/sbom-tool
+
+      - name: "SPDX: Prepare minimal build drop"
+        run: |
+          mkdir -p "${RUNNER_TEMP}/sbom-drop"
+          cp package.json package-lock.json "${RUNNER_TEMP}/sbom-drop/"
+
+      - name: "SPDX: Generate SBOM"
+        run: |
+          sbom-tool generate \
+            -b "${RUNNER_TEMP}/sbom-drop" \
+            -bc "${GITHUB_WORKSPACE}" \
+            -pn "${APP_NAME}" \
+            -pv "${GITHUB_RUN_NUMBER}" \
+            -ps "nsj" \
+            -nsb "https://jp.security.ntt/" \
+            -V Verbose
+
+      - name: "SPDX: Archive"
+        run: |
+          cd "${RUNNER_TEMP}/sbom-drop/_manifest"
+          zip -r "${GITHUB_WORKSPACE}/${APP_NAME}_spdx_${GITHUB_RUN_NUMBER}.zip" "spdx_2.2"
+
+      - name: "SPDX: Upload artifact"
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.APP_NAME }}-spdx-sbom
+          path: ${{ github.workspace }}/${{ env.APP_NAME }}_spdx_${{ github.run_number }}.zip
+          if-no-files-found: error
+
+      # ============================================
+      # CycloneDX: Install -> Generate -> Archive -> Upload
+      # ============================================
+      - name: "CycloneDX: Install cyclonedx-npm"
+        run: |
+          npm i -g @cyclonedx/cyclonedx-npm
+          cyclonedx-npm --version
+
+      - name: "CycloneDX: Generate from npm"
+        run: |
+          mkdir -p "${RUNNER_TEMP}/cyclonedx"
+          cyclonedx-npm --output-format JSON \
+            --output-file "${RUNNER_TEMP}/cyclonedx/cyclonedx_npm_${GITHUB_RUN_NUMBER}.json"
+
+      - name: "CycloneDX: Archive"
+        run: |
+          cd "${RUNNER_TEMP}"
+          zip -r "${GITHUB_WORKSPACE}/${APP_NAME}_cyclonedx_${GITHUB_RUN_NUMBER}.zip" "cyclonedx"
+
+      - name: "CycloneDX: Upload artifact"
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.APP_NAME }}-cyclonedx-sbom
+          path: ${{ github.workspace }}/${{ env.APP_NAME }}_cyclonedx_${{ github.run_number }}.zip
+          if-no-files-found: error
