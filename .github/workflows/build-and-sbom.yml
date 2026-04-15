@@ -22,10 +22,10 @@ jobs:
       # Checkout / Node.js setup
       # ============================================
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -42,14 +42,14 @@ jobs:
       # Build artifact
       # ============================================
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: react-app-build
           path: dist
           if-no-files-found: error
 
       # ============================================
-      # SPDX: Install -> Generate -> Archive -> Upload
+      # SPDX: Install -> Generate -> Upload
       # ============================================
       - name: "SPDX: Install sbom-tool"
         run: |
@@ -73,20 +73,15 @@ jobs:
             -nsb "https://jp.security.ntt/" \
             -V Verbose
 
-      - name: "SPDX: Archive"
-        run: |
-          cd "${RUNNER_TEMP}/sbom-drop/_manifest"
-          zip -r "${GITHUB_WORKSPACE}/${APP_NAME}_spdx_${GITHUB_RUN_NUMBER}.zip" "spdx_2.2"
-
       - name: "SPDX: Upload artifact"
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ env.APP_NAME }}-spdx-sbom
-          path: ${{ github.workspace }}/${{ env.APP_NAME }}_spdx_${{ github.run_number }}.zip
+          path: ${{ runner.temp }}/sbom-drop/_manifest/spdx_2.2
           if-no-files-found: error
 
       # ============================================
-      # CycloneDX: Install -> Generate -> Archive -> Upload
+      # CycloneDX: Install -> Generate -> Upload
       # ============================================
       - name: "CycloneDX: Install cyclonedx-npm"
         run: |
@@ -99,14 +94,9 @@ jobs:
           cyclonedx-npm --output-format JSON \
             --output-file "${RUNNER_TEMP}/cyclonedx/cyclonedx_npm_${GITHUB_RUN_NUMBER}.json"
 
-      - name: "CycloneDX: Archive"
-        run: |
-          cd "${RUNNER_TEMP}"
-          zip -r "${GITHUB_WORKSPACE}/${APP_NAME}_cyclonedx_${GITHUB_RUN_NUMBER}.zip" "cyclonedx"
-
       - name: "CycloneDX: Upload artifact"
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ env.APP_NAME }}-cyclonedx-sbom
-          path: ${{ github.workspace }}/${{ env.APP_NAME }}_cyclonedx_${{ github.run_number }}.zip
+          path: ${{ runner.temp }}/cyclonedx/cyclonedx_npm_${{ github.run_number }}.json
           if-no-files-found: error
