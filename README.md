@@ -51,3 +51,4 @@ npm run dev
 `axios` の脆弱性バージョン指定を含む検証用ブランチとして、以下を用意しています。
 
 - `security/axios-vulnerable-version`
+- `security/apisauce-vulnerable-version`
